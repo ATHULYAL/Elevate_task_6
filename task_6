@@ -1,0 +1,151 @@
+USE OnlineBookstore;
+
+--  Find books priced above the average book price (scalar subquery)
+SELECT title, price
+FROM Books
+WHERE price > (SELECT AVG(price) FROM Books);
+/*
++--------------+--------+
+| title        | price  |
++--------------+--------+
+| Harry Potter | 499.00 |
++--------------+--------+
+*/
+
+--  List users who placed at least one order (IN + subquery)
+SELECT name
+FROM Users
+WHERE user_id IN (SELECT DISTINCT user_id FROM Orders);
+/*
++--------+
+| name   |
++--------+
+| Alice  |
+| Bob    |
++--------+
+*/
+
+--  List books that have never been ordered (NOT EXISTS with correlated subquery)
+SELECT B.title
+FROM Books B
+WHERE NOT EXISTS (
+  SELECT 1 FROM OrderItems OI
+  WHERE OI.book_id = B.book_id
+);
+/*
++--------------+
+| title        |
++--------------+
+| Mystery Book |
+| Copy of 1984 |
++--------------+
+*/
+
+--  Show total number of orders and payments per user (subquery in SELECT)
+SELECT 
+  U.name,
+  (SELECT COUNT(*) FROM Orders O WHERE O.user_id = U.user_id) AS total_orders,
+  (SELECT COUNT(*) FROM Payments P 
+   WHERE P.order_id IN (SELECT order_id FROM Orders WHERE user_id = U.user_id)) AS total_payments
+FROM Users U;
+/*
++--------+--------------+----------------+
+| name   | total_orders | total_payments |
++--------+--------------+----------------+
+| Alice  |      1       |        1       |
+| Bob    |      1       |        1       |
+| Charlie|      0       |        0       |
+| Diana  |      0       |        0       |
++--------+--------------+----------------+
+*/
+
+--  List books that have been ordered more than once (correlated + HAVING)
+SELECT B.title, COUNT(*) AS times_ordered
+FROM Books B
+JOIN OrderItems OI ON B.book_id = OI.book_id
+GROUP BY B.title
+HAVING COUNT(*) > 1;
+/*
+Assuming repeated orders: result would be:
++--------------+---------------+
+| title        | times_ordered |
++--------------+---------------+
+| 1984         |       2       |
++--------------+---------------+
+*/
+
+--  List users who have not placed any orders (NOT IN + subquery)
+SELECT name
+FROM Users
+WHERE user_id NOT IN (SELECT DISTINCT user_id FROM Orders);
+/*
++----------+
+| name     |
++----------+
+| Charlie  |
+| Diana    |
++----------+
+*/
+
+--  Show the most expensive book per author (correlated subquery)
+SELECT title, price, author_id
+FROM Books B1
+WHERE price = (
+  SELECT MAX(price)
+  FROM Books B2
+  WHERE B2.author_id = B1.author_id
+);
+/*
++--------------+--------+-----------+
+| title        | price  | author_id |
++--------------+--------+-----------+
+| Harry Potter | 499.00 |     2     |
+| 1984         | 299.99 |     1     |
+| Mystery Book | 150.00 |     3     |
++--------------+--------+-----------+
+*/
+
+--  Use subquery in FROM (Derived table): total revenue per user
+SELECT U.name, T.total_amount
+FROM Users U
+JOIN (
+  SELECT O.user_id, SUM(OI.price * OI.quantity) AS total_amount
+  FROM Orders O
+  JOIN OrderItems OI ON O.order_id = OI.order_id
+  GROUP BY O.user_id
+) T ON U.user_id = T.user_id;
+/*
++--------+--------------+
+| name   | total_amount |
++--------+--------------+
+| Alice  |   499.49     |
+| Bob    |   998.00     |
++--------+--------------+
+*/
+
+--  Find orders that have no payments (NOT EXISTS)
+SELECT order_id
+FROM Orders O
+WHERE NOT EXISTS (
+  SELECT 1 FROM Payments P
+  WHERE P.order_id = O.order_id
+);
+/*
+Only shows if any orders were not paid.
+*/
+
+--  Use EXISTS to find books that were ordered
+SELECT title
+FROM Books B
+WHERE EXISTS (
+  SELECT 1 FROM OrderItems OI WHERE OI.book_id = B.book_id
+);
+/*
++--------------+
+| title        |
++--------------+
+| 1984         |
+| Animal Farm  |
+| Harry Potter |
++--------------+
+*/
